@@ -31,4 +31,10 @@ gboolean         dnf_rpmts_add_install_filename2(rpmts           ts,
                                                  DnfPackage     *pkg,
                                                  GError         **error);
 
+gboolean         dnf_rpmts_add_reinstall_filename(rpmts ts,
+                                                  const gchar *filename,
+                                                  gboolean allow_untrusted,
+                                                  GError **error);
+
+
 #endif /* __DNF_RPMTS_PRIVATE_HPP */

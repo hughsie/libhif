@@ -88,6 +88,111 @@ test_fail_safe(Header * hdr, DnfPackage * pkg, GError **error)
     return ret;
 }
 
+static gboolean
+result_is_accepted(gint result, gboolean allow_untrusted, const gchar *filename, GError **error) {
+    /* be less strict when we're allowing untrusted transactions */
+    if (allow_untrusted) {
+        switch(result) {
+        case RPMRC_NOKEY:
+        case RPMRC_NOTFOUND:
+        case RPMRC_NOTTRUSTED:
+        case RPMRC_OK:
+            return TRUE;
+        case RPMRC_FAIL:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("signature does not verify for %s"),
+                        filename);
+            return FALSE;
+        default:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("failed to open(generic error): %s"),
+                        filename);
+            return FALSE;
+        }
+    } else {
+        switch(result) {
+        case RPMRC_OK:
+            return TRUE;
+        case RPMRC_NOTTRUSTED:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("failed to verify key for %s"),
+                        filename);
+            return FALSE;
+        case RPMRC_NOKEY:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("public key unavailable for %s"),
+                        filename);
+            return FALSE;
+        case RPMRC_NOTFOUND:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("signature not found for %s"),
+                        filename);
+            return FALSE;
+        case RPMRC_FAIL:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("signature does not verify for %s"),
+                        filename);
+            return FALSE;
+        default:
+            g_set_error(error,
+                        DNF_ERROR,
+                        DNF_ERROR_INTERNAL_ERROR,
+                        _("failed to open(generic error): %s"),
+                        filename);
+            return FALSE;
+        }
+    }
+}
+
+gboolean
+dnf_rpmts_add_reinstall_filename(rpmts ts,
+                                 const gchar *filename,
+                                 gboolean allow_untrusted,
+                                 GError **error) try
+{
+    gboolean ret = TRUE;
+    gint res;
+    Header hdr;
+    FD_t fd;
+
+    /* open this */
+    fd = Fopen(filename, "r.ufdio");
+    res = rpmReadPackageFile(ts, fd, filename, &hdr);
+
+    if (!result_is_accepted(res, allow_untrusted, filename, error)) {
+        ret = FALSE;
+        goto out;
+    }
+
+    /* add to the transaction */
+    res = rpmtsAddReinstallElement(ts, hdr, (fnpyKey) filename);
+    if (res != 0) {
+        ret = FALSE;
+        g_set_error(error,
+                    DNF_ERROR,
+                    DNF_ERROR_INTERNAL_ERROR,
+                    _("failed to add reinstall element: %1$s [%2$i]"),
+                    filename, res);
+        goto out;
+    }
+out:
+    Fclose(fd);
+    headerFree(hdr);
+    return ret;
+} CATCH_TO_GERROR(FALSE)
+
 gboolean
 dnf_rpmts_add_install_filename2(rpmts ts,
                                 const gchar *filename,
@@ -105,76 +210,9 @@ dnf_rpmts_add_install_filename2(rpmts ts,
     fd = Fopen(filename, "r.ufdio");
     res = rpmReadPackageFile(ts, fd, filename, &hdr);
 
-    /* be less strict when we're allowing untrusted transactions */
-    if (allow_untrusted) {
-        switch(res) {
-        case RPMRC_NOKEY:
-        case RPMRC_NOTFOUND:
-        case RPMRC_NOTTRUSTED:
-        case RPMRC_OK:
-            break;
-        case RPMRC_FAIL:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("signature does not verify for %s"),
-                        filename);
-            goto out;
-        default:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("failed to open(generic error): %s"),
-                        filename);
-            goto out;
-        }
-    } else {
-        switch(res) {
-        case RPMRC_OK:
-            break;
-        case RPMRC_NOTTRUSTED:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("failed to verify key for %s"),
-                        filename);
-            goto out;
-        case RPMRC_NOKEY:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("public key unavailable for %s"),
-                        filename);
-            goto out;
-        case RPMRC_NOTFOUND:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("signature not found for %s"),
-                        filename);
-            goto out;
-        case RPMRC_FAIL:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("signature does not verify for %s"),
-                        filename);
-            goto out;
-        default:
-            ret = FALSE;
-            g_set_error(error,
-                        DNF_ERROR,
-                        DNF_ERROR_INTERNAL_ERROR,
-                        _("failed to open(generic error): %s"),
-                        filename);
-            goto out;
-        }
+    if (!result_is_accepted(res, allow_untrusted, filename, error)) {
+        ret = FALSE;
+        goto out;
     }
     if (pkg) {
         if (!test_fail_safe(&hdr, pkg, error)) {
