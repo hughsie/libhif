@@ -264,14 +264,15 @@ getItemIdentifier(ItemPtr item)
 
 /**
  * Resolve the difference between RPMs in the first and second transaction item
- *  and create a ItemPair of Upgrade, Downgrade or drop the item from the merged
- *  transaction set in case of both packages are of the same version.
- * Method is called when original package is being removed and than installed again.
+ *  and create a ItemPair of Upgrade, Downgrade or remove the item from the merged
+ *  transaction set in case of both packages are the same.
+ * Method is called when original package is being removed and then installed again.
  * \param itemPairMap merged transaction set
  * \param previousItemPair original item pair
  * \param mTransItem new transaction item
+ * \return true if the original and new transaction item differ
  */
-void
+bool
 MergedTransaction::resolveRPMDifference(ItemPairMap &itemPairMap,
                                         ItemPair &previousItemPair,
                                         TransactionItemBasePtr mTransItem)
@@ -287,7 +288,7 @@ MergedTransaction::resolveRPMDifference(ItemPairMap &itemPairMap,
         firstRPM->getRelease() == secondRPM->getRelease()) {
         // Drop the item from merged transaction
         itemPairMap.erase(getItemIdentifier(firstItem));
-        return;
+        return false;
     } else if ((*firstRPM) < (*secondRPM)) {
         // Upgrade to secondRPM
         previousItemPair.first->setAction(TransactionItemAction::UPGRADED);
@@ -298,6 +299,7 @@ MergedTransaction::resolveRPMDifference(ItemPairMap &itemPairMap,
         mTransItem->setAction(TransactionItemAction::DOWNGRADE);
     }
     previousItemPair.second = mTransItem;
+    return true;
 }
 
 void
@@ -308,12 +310,14 @@ MergedTransaction::resolveErase(ItemPairMap &itemPairMap,
     /*
      * The original item has been removed - it has to be installed now unless the rpmdb
      *  has changed. Resolve the difference between packages and mark it as Upgrade,
-     *  Reinstall or Downgrade
+     *  Downgrade or remove it from the transaction
      */
     if (mTransItem->getAction() == TransactionItemAction::INSTALL) {
         if (mTransItem->getItem()->getItemType() == ItemType::RPM) {
             // resolve the difference between RPM packages
-            resolveRPMDifference(itemPairMap, previousItemPair, mTransItem);
+            if (!resolveRPMDifference(itemPairMap, previousItemPair, mTransItem)) {
+                return;
+            }
         } else {
             // difference between comps can't be resolved
             mTransItem->setAction(TransactionItemAction::REINSTALL);
