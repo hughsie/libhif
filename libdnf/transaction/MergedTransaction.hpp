@@ -76,7 +76,7 @@ protected:
     typedef std::map< std::string, ItemPair > ItemPairMap;
 
     void mergeItem(ItemPairMap &itemPairMap, TransactionItemBasePtr transItem);
-    void resolveRPMDifference(ItemPairMap &itemPairMap, ItemPair &previousItemPair, TransactionItemBasePtr mTransItem);
+    bool resolveRPMDifference(ItemPairMap &itemPairMap, ItemPair &previousItemPair, TransactionItemBasePtr mTransItem);
     void resolveErase(ItemPairMap &itemPairMap, ItemPair &previousItemPair, TransactionItemBasePtr mTransItem);
     void resolveAltered(ItemPairMap &itemPairMap, ItemPair &previousItemPair, TransactionItemBasePtr mTransItem);
 };
