@@ -214,6 +214,8 @@ private:
     std::map<std::string, std::string> moduleDefaults;
     std::vector<std::tuple<LibsolvRepo *, ModulemdModuleStream *, std::string>> modulesV2;
 
+    std::vector<std::tuple<std::string, std::string, libdnf::PackageSet>> modules_to_enable;
+
     bool isEnabled(const std::string &name, const std::string &stream);
 };
 
@@ -575,6 +577,23 @@ ModulePackageContainer::enable(const ModulePackage * module, const bool count)
     return enable(module->getName(), module->getStream(), count);
 }
 
+bool
+ModulePackageContainer::enable(const std::string & name, const std::string & stream, const std::vector<ModulePackage *> & module_packages, const bool count)
+{
+    bool changed{false};
+    // Like in DNF 5, create a PackageSet of IDs for the stream to be enabled,
+    // because it better matches user requirements than just
+    // "module(name:stream)" provides. (E.g. user might have requested specific
+    // context or version.)
+    libdnf::PackageSet package_set{pImpl->moduleSack};
+    for (const auto & module_package : module_packages) {
+        changed |= enable(module_package, count);
+        package_set.set(module_package->getId());
+    }
+    pImpl->modules_to_enable.push_back(std::make_tuple(name, stream, package_set));
+    return changed;
+}
+
 /**
  * @brief Mark module as not part of an enabled stream.
  */
@@ -691,16 +710,46 @@ ModulePackageContainer::Impl::moduleSolve(const std::vector<ModulePackage *> & m
     dnf_sack_make_provides_ready(moduleSack);
     Goal goal(moduleSack);
     Goal goalWeak(moduleSack);
-    for (const auto &module : modules) {
-        std::ostringstream ss;
-        auto name = module->getName();
-        ss << "module(" << name << ":" << module->getStream() << ")";
-        Selector selector(moduleSack);
-        bool optional = persistor->getState(name) == ModuleState::DEFAULT;
-        selector.set(HY_PKG_PROVIDES, HY_EQ, ss.str().c_str());
+
+    std::set<std::string> module_packages_already_requested;
+    for (auto & module_to_enable : modules_to_enable) {
+        const auto & name = std::get<0>(module_to_enable);
+        auto & stream = std::get<1>(module_to_enable);
+        auto & package_set = std::get<2>(module_to_enable);
+
+        module_packages_already_requested.insert(tfm::format("%s:%s", name, stream));
+
+        const bool optional = persistor->getState(name) == ModuleState::DEFAULT;
+
+        libdnf::Selector selector{moduleSack};
+        selector.set(&package_set);
+
+        // Request to install one of the module packages
         goal.install(&selector, optional);
         goalWeak.install(&selector, true);
     }
+
+    for (const auto &module : modules) {
+        std::ostringstream ss;
+        const auto & name = module->getName();
+        const auto & stream = module->getStream();
+
+        const auto & nameAndStream = tfm::format("%s:%s", name, stream);
+
+        // Only request to install "Provides: module(name:stream)" if we
+        // haven't already requested to install one of the packages belonging
+        // to that stream
+        if (module_packages_already_requested.find(nameAndStream) ==
+            module_packages_already_requested.end()) {
+            ss << "module(" << nameAndStream << ")";
+            Selector selector(moduleSack);
+            bool optional = persistor->getState(name) == ModuleState::DEFAULT;
+            selector.set(HY_PKG_PROVIDES, HY_EQ, ss.str().c_str());
+            goal.install(&selector, optional);
+            goalWeak.install(&selector, true);
+        }
+    }
+
     auto ret = goal.run(static_cast<DnfGoalActions>(DNF_IGNORE_WEAK | DNF_FORCE_BEST));
     if (debugSolver) {
         goal.writeDebugdata("debugdata/modules");
@@ -1208,6 +1257,7 @@ void ModulePackageContainer::save()
 
 void ModulePackageContainer::rollback()
 {
+    pImpl->modules_to_enable.clear();
     pImpl->persistor->rollback();
 }
 

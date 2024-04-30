@@ -149,7 +149,7 @@ public:
     std::vector<ModulePackage *> requiresModuleEnablement(const libdnf::PackageSet & packages);
 
     /**
-    * @brief Enable module stream. Return true if requested change realy triggers a change in
+    * @brief Enable module stream. Return true if requested change really triggers a change in
     * the persistor.
     * When the count parameter is set to false the change will not count towards the limit of
     * module state modifications.
@@ -161,7 +161,22 @@ public:
     bool enable(const std::string &name, const std::string &stream, const bool count = true);
 
     /**
-    * @brief Enable module stream. Return true if requested changes realy triggers a change in
+    * @brief Enable module stream with an explicit set of module packages.
+    * Return true only if requested change really reiggers a change in the
+    * persistor.
+    * When the count parameter is set to false the change will not count towards the limit of
+    * module state modifications.
+    * It can throw ModulePackageContainer::EnableMultipleStreamsException or
+    * ModulePackageContainer::NoModuleException exceprion if module do not exist
+    *
+    * @return bool
+    */
+    bool enable(const std::string &name, const std::string &stream,
+                const std::vector<ModulePackage *> & module_packages,
+                const bool count = true);
+
+    /**
+    * @brief Enable module stream. Return true if requested changes really triggers a change in
     * the persistor.
     * When the count parameter is set to false the change will not count towards the limit of
     * module state modifications.
