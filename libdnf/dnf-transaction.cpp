@@ -602,7 +602,7 @@ dnf_transaction_ts_progress_cb(const void *arg,
 
             /* map to correct action code */
             action = dnf_package_get_action(pkg);
-            if (action == DNF_STATE_ACTION_UNKNOWN)
+            if (action == DNF_STATE_ACTION_UNKNOWN || action == DNF_STATE_ACTION_REINSTALL)
                 action = DNF_STATE_ACTION_INSTALL;
 
             /* set the pkgid if not already set */
@@ -641,7 +641,7 @@ dnf_transaction_ts_progress_cb(const void *arg,
 
             /* map to correct action code */
             action = dnf_package_get_action(pkg);
-            if (action == DNF_STATE_ACTION_UNKNOWN)
+            if (action == DNF_STATE_ACTION_UNKNOWN || action == DNF_STATE_ACTION_REINSTALL)
                 action = DNF_STATE_ACTION_REMOVE;
 
             /* remove start */
@@ -716,7 +716,7 @@ dnf_transaction_ts_progress_cb(const void *arg,
 
             /* map to correct action code */
             action = dnf_package_get_action(pkg);
-            if (action == DNF_STATE_ACTION_UNKNOWN)
+            if (action == DNF_STATE_ACTION_UNKNOWN || action == DNF_STATE_ACTION_REINSTALL)
                 action = DNF_STATE_ACTION_REMOVE;
 
             dnf_state_set_package_progress(
@@ -1353,6 +1353,15 @@ dnf_transaction_commit(DnfTransaction *transaction, HyGoal goal, DnfState *state
         }
         g_ptr_array_unref(pkglist);
     }
+
+    /* add reinstalled packages to a helper array which is used to
+     * map removed packages auto-added by rpm to actual DnfPackage's */
+    pkglist = dnf_goal_get_packages(goal, DNF_PACKAGE_INFO_REINSTALL, -1);
+    for (i = 0; i < pkglist->len; i++) {
+        pkg_tmp = static_cast< DnfPackage * >(g_ptr_array_index(pkglist, i));
+        g_ptr_array_add(priv->remove_helper, g_object_ref(pkg_tmp));
+    }
+    g_ptr_array_unref(pkglist);
 
     /* this section done */
     ret = dnf_state_done(state, error);
