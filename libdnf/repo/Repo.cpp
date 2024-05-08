@@ -873,6 +873,9 @@ void Repo::Impl::addCountmeFlag(LrHandle *handle) {
      * This is to align the time window with an absolute point in time rather
      * than the last counting event (which could facilitate tracking across
      * multiple such events).
+     *
+     * In the below comments, the window's current position will be referred to
+     * as "this window" for brevity.
      */
     auto logger(Log::getLogger());
 
@@ -933,7 +936,7 @@ void Repo::Impl::addCountmeFlag(LrHandle *handle) {
         for (i = 0; i < COUNTME_BUCKETS.size(); ++i)
             if (step < COUNTME_BUCKETS[i])
                 break;
-        int bucket = i + 1;  // Buckets are indexed from 1
+        int bucket = i + 1;  // Buckets are numbered from 1
 
         // Set the flag
         std::string flag = "countme=" + std::to_string(bucket);
