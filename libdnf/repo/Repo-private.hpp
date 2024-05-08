@@ -91,6 +91,7 @@ public:
     void fetch(const std::string & destdir, std::unique_ptr<LrHandle> && h);
     std::string getCachedir() const;
     std::string getPersistdir() const;
+    time_t getSystemEpoch() const;
     int getAge() const;
     void expire();
     bool isExpired() const;
