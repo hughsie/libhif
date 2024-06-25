@@ -185,6 +185,13 @@ dnf_sack_init(DnfSack *sack)
     DnfSackPrivate *priv = GET_PRIVATE(sack);
     priv->pool = pool_create();
     pool_set_flag(priv->pool, POOL_FLAG_WHATPROVIDESWITHDISABLED, 1);
+
+    // Configures the pool_addfileprovides_queue() method to only add files from primary.xml.
+    // This ensures the method works correctly even if filelist.xml metadata are not loaded.
+    // At the same time when filelist.xml are loaded libsolv is able to search them for required
+    // files if needed.
+    pool_set_flag(priv->pool, POOL_FLAG_ADDFILEPROVIDESFILTERED, 1);
+
     priv->running_kernel_id = -1;
     priv->running_kernel_fn = running_kernel;
     priv->considered_uptodate = TRUE;
