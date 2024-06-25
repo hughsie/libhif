@@ -817,20 +817,16 @@ dnf_repo_set_metadata_expire(DnfRepo *repo, guint metadata_expire)
 /**
 * @brief Format user password string
 *
-* Returns user and password in user:password form. If encode is True,
-* special characters in user and password are URL encoded.
+* Returns user and password in user:password form.
+* Special characters in user and password are URL encoded.
 *
 * @param user Username
 * @param passwd Password
-* @param encode If quote is True, special characters in user and password are URL encoded.
 * @return User and password in user:password form
 */
-static std::string formatUserPassString(const std::string & user, const std::string & passwd, bool encode)
+static std::string formatUserPassString(const std::string & user, const std::string & passwd)
 {
-    if (encode)
-        return libdnf::urlEncode(user) + ":" + libdnf::urlEncode(passwd);
-    else
-        return user + ":" + passwd;
+    return libdnf::urlEncode(user) + ":" + libdnf::urlEncode(passwd);
 }
 
 /* Resets repository configuration options previously readed from repository
@@ -1130,7 +1126,7 @@ dnf_repo_set_keyfile_data(DnfRepo *repo, gboolean reloadFromGKeyFile, GError **e
                             "repo '%s': 'proxy_username' is set but not 'proxy_password'", repoId);
                 return FALSE;
             }
-            tmp_str = formatUserPassString(tmp_str, conf->proxy_password().getValue(), true);
+            tmp_str = formatUserPassString(tmp_str, conf->proxy_password().getValue());
             tmp_cstr = tmp_str.c_str();
         }
     }
@@ -1138,14 +1134,11 @@ dnf_repo_set_keyfile_data(DnfRepo *repo, gboolean reloadFromGKeyFile, GError **e
         return FALSE;
 
     // setup username and password
-    tmp_cstr = NULL;
-    tmp_str = conf->username().getValue();
-    if (!tmp_str.empty()) {
-        // TODO Use URL encoded form, needs support in librepo
-        tmp_str = formatUserPassString(tmp_str, conf->password().getValue(), false);
-        tmp_cstr = tmp_str.c_str();
-    }
-    if (!lr_handle_setopt(priv->repo_handle, error, LRO_USERPWD, tmp_cstr))
+    auto & username = conf->username().getValue();
+    if (!lr_handle_setopt(priv->repo_handle, error, LRO_USERNAME, username.empty() ? NULL : username.c_str()))
+        return FALSE;
+    auto & password = conf->password().getValue();
+    if (!lr_handle_setopt(priv->repo_handle, error, LRO_PASSWORD, password.empty() ? NULL : password.c_str()))
         return FALSE;
 
     auto proxy_sslverify = conf->proxy_sslverify().getValue();

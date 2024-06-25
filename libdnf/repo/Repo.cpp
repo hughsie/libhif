@@ -252,20 +252,16 @@ int Repo::Impl::mirrorFailureCB(void * data, const char * msg, const char * url,
 /**
 * @brief Format user password string
 *
-* Returns user and password in user:password form. If quote is True,
-* special characters in user and password are URL encoded.
+* Returns user and password in user:password form.
+* Special characters in user and password are URL encoded.
 *
 * @param user Username
 * @param passwd Password
-* @param encode If quote is True, special characters in user and password are URL encoded.
 * @return User and password in user:password form
 */
-static std::string formatUserPassString(const std::string & user, const std::string & passwd, bool encode)
+static std::string formatUserPassString(const std::string & user, const std::string & passwd)
 {
-    if (encode)
-        return urlEncode(user) + ":" + urlEncode(passwd);
-    else
-        return user + ":" + passwd;
+    return urlEncode(user) + ":" + urlEncode(passwd);
 }
 
 Repo::Impl::Impl(Repo & owner, const std::string & id, Type type, std::unique_ptr<ConfigRepo> && conf)
@@ -524,12 +520,8 @@ static void setHandle(LrHandle * h, ConfigT & config, const char * repoId = null
     }
 
     // setup username/password if needed
-    auto userpwd = config.username().getValue();
-    if (!userpwd.empty()) {
-        // TODO Use URL encoded form, needs support in librepo
-        userpwd = formatUserPassString(userpwd, config.password().getValue(), false);
-        handleSetOpt(h, LRO_USERPWD, userpwd.c_str());
-    }
+    handleSetOpt(h, LRO_USERNAME, config.username().getValue().empty() ? NULL : config.username().getValue().c_str());
+    handleSetOpt(h, LRO_PASSWORD, config.password().getValue().empty() ? NULL : config.password().getValue().c_str());
 
     if (!config.proxy().empty() && !config.proxy().getValue().empty())
         handleSetOpt(h, LRO_PROXY, config.proxy().getValue().c_str());
@@ -548,7 +540,7 @@ static void setHandle(LrHandle * h, ConfigT & config, const char * repoId = null
                 else
                     throw RepoError(_("'proxy_username' is set but not 'proxy_password'"));
             }
-            userpwd = formatUserPassString(userpwd, config.proxy_password().getValue(), true);
+            userpwd = formatUserPassString(userpwd, config.proxy_password().getValue());
             handleSetOpt(h, LRO_PROXYUSERPWD, userpwd.c_str());
         }
     }
