@@ -89,7 +89,7 @@ glob_for_cachedir(char *path)
     if (!g_str_has_suffix(path, "XXXXXX"))
         return ret;
 
-    wordexp_t word_vector;
+    wordexp_t word_vector = {0};
     char *p = g_strdup(path);
     const int len = strlen(p);
     struct stat s;
@@ -98,6 +98,7 @@ glob_for_cachedir(char *path)
     p[len-6] = '*';
     p[len-5] = '\0';
     if (wordexp(p, &word_vector, 0)) {
+        wordfree(&word_vector);
         g_free(p);
         return ret;
     }
