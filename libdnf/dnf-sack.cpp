@@ -186,12 +186,6 @@ dnf_sack_init(DnfSack *sack)
     priv->pool = pool_create();
     pool_set_flag(priv->pool, POOL_FLAG_WHATPROVIDESWITHDISABLED, 1);
 
-    // Configures the pool_addfileprovides_queue() method to only add files from primary.xml.
-    // This ensures the method works correctly even if filelist.xml metadata are not loaded.
-    // At the same time when filelist.xml are loaded libsolv is able to search them for required
-    // files if needed.
-    pool_set_flag(priv->pool, POOL_FLAG_ADDFILEPROVIDESFILTERED, 1);
-
     priv->running_kernel_id = -1;
     priv->running_kernel_fn = running_kernel;
     priv->considered_uptodate = TRUE;
@@ -1890,6 +1884,13 @@ dnf_sack_load_repo(DnfSack *sack, HyRepo repo, int flags, GError **error) try
                            HY_EXT_FILENAMES, error))
                 return FALSE;
         }
+    } else {
+        // Configures the pool_addfileprovides_queue() method to only add files from primary.xml.
+        // This ensures the method works correctly even if filelist.xml metadata are not loaded.
+        // When searching for file provides outside of primary.xml this flag incurs a big performance
+        // hit because libsolv has to go through all the files for each file provide therefore don't
+        // set it if filelists are loaded.
+        pool_set_flag(priv->pool, POOL_FLAG_ADDFILEPROVIDESFILTERED, 1);
     }
     if (flags & DNF_SACK_LOAD_FLAG_USE_OTHER) {
         retval = load_ext(sack, repo, _HY_REPODATA_OTHER,
