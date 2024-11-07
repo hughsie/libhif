@@ -284,6 +284,7 @@ class ConfigMain::Impl {
     OptionString comment{nullptr};
     OptionBool downloadonly{false}; // runtime only option
     OptionBool ignorearch{false};
+    OptionEnum<std::string> persistence{"auto", {"auto", "persist", "transient"}};
     OptionString module_platform_id{nullptr};
     OptionBool module_stream_switch{false};
     OptionBool module_obsoletes{false};
@@ -458,6 +459,7 @@ ConfigMain::Impl::Impl(Config & owner)
     owner.optBinds().add("user_agent", user_agent);
     owner.optBinds().add("countme", countme);
     owner.optBinds().add("protect_running_kernel", protect_running_kernel);
+    owner.optBinds().add("persistence", persistence);
 
     // Repo main config
 
@@ -613,6 +615,7 @@ OptionPath & ConfigMain::destdir() { return pImpl->destdir; }
 OptionString & ConfigMain::comment() { return pImpl->comment; }
 OptionBool & ConfigMain::downloadonly() { return pImpl->downloadonly; }
 OptionBool & ConfigMain::ignorearch() { return pImpl->ignorearch; }
+OptionEnum<std::string> & ConfigMain::persistence() { return pImpl->persistence; }
 
 OptionString & ConfigMain::module_platform_id() { return pImpl->module_platform_id; }
 OptionBool & ConfigMain::module_stream_switch() { return pImpl->module_stream_switch; }
