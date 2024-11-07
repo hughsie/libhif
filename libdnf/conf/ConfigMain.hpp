@@ -123,6 +123,7 @@ public:
     OptionString & comment();
     OptionBool & downloadonly();
     OptionBool & ignorearch();
+    OptionEnum<std::string> & persistence();
 
     OptionString & module_platform_id();
     OptionBool & module_stream_switch();
