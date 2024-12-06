@@ -71,10 +71,6 @@ template<class T>
 class Iterator {
 public:
     Iterator(typename T::iterator _cur, typename T::iterator _end) : cur(_cur), end(_end) {}
-    Iterator* __iter__()
-    {
-        return this;
-    }
 
     typename T::iterator cur;
     typename T::iterator end;
