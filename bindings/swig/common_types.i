@@ -63,10 +63,6 @@ template<class T>
 class Iterator {
 public:
     Iterator(typename T::iterator _cur, typename T::iterator _end) : cur(_cur), end(_end) {}
-    Iterator* __iter__()
-    {
-      return this;
-    }
 
     typename T::iterator cur;
     typename T::iterator end;
@@ -165,3 +161,10 @@ EXTEND_TEMPLATE_PreserveOrderMapIterator(std::string, std::string)
 EXTEND_TEMPLATE_PreserveOrderMapIterator(std::string, libdnf::PreserveOrderMap<std::string, std::string>)
 
 %exception;  // beware this resets all exception handlers if you import this file after defining any
+
+%pythoncode %{
+def PreserveOrderMapStringStringIterator___iter__(self):
+    return self
+PreserveOrderMapStringStringIterator.__iter__ = PreserveOrderMapStringStringIterator___iter__
+del PreserveOrderMapStringStringIterator___iter__
+%}
