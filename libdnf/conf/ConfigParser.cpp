@@ -88,6 +88,8 @@ void ConfigParser::read(const std::string & filePath)
     try {
         IniParser parser(filePath);
         ::libdnf::read(*this, parser);
+    } catch (const IniParser::FileDoesNotExist & e) {
+        throw FileDoesNotExist(e.what());
     } catch (const IniParser::CantOpenFile & e) {
         throw CantOpenFile(e.what());
     } catch (const IniParser::Exception & e) {

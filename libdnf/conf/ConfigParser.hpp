@@ -55,6 +55,9 @@ public:
     struct CantOpenFile : public Exception {
         CantOpenFile(const std::string & what) : Exception(what) {}
     };
+    struct FileDoesNotExist : public CantOpenFile {
+        FileDoesNotExist(const std::string & what) : CantOpenFile(what) {}
+    };
     struct ParsingError : public Exception {
         ParsingError(const std::string & what) : Exception(what) {}
     };
