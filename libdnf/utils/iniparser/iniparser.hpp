@@ -46,6 +46,10 @@ public:
         CantOpenFile() {}
         const char * what() const noexcept override;
     };
+    struct FileDoesNotExist : public CantOpenFile {
+        FileDoesNotExist() {}
+        const char * what() const noexcept override;
+    };
     struct MissingSectionHeader : public Exception {
         MissingSectionHeader(int lineNumber) : Exception(lineNumber) {}
         const char * what() const noexcept override;
