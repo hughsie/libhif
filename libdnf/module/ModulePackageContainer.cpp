@@ -1370,10 +1370,10 @@ static inline void
 parseConfig(ConfigParser &parser, const std::string &name, const char *path)
 {
     auto logger(Log::getLogger());
+    const auto fname = name + ".module";
+    g_autofree gchar * cfn = g_build_filename(path, fname.c_str(), NULL);
 
     try {
-        const auto fname = name + ".module";
-        g_autofree gchar * cfn = g_build_filename(path, fname.c_str(), NULL);
         parser.read(cfn);
 
         /* FIXME: init empty config or throw error? */
@@ -1393,8 +1393,13 @@ parseConfig(ConfigParser &parser, const std::string &name, const char *path)
             parser.setValue(name, "state", parser.getValue(name, "enabled"));
             parser.removeOption(name, "enabled");
         }
-    } catch (const ConfigParser::CantOpenFile &) {
+    } catch (const ConfigParser::FileDoesNotExist &) {
         /* No module config file present. Fill values in */
+        initConfig(parser, name);
+        return;
+    } catch (const ConfigParser::CantOpenFile &) {
+        /* File exists but is not readable. */
+        logger->warning(tfm::format("Cannot read \"%s\". Modular filtering may be affected.", cfn));
         initConfig(parser, name);
         return;
     }
