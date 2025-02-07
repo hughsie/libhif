@@ -20,11 +20,19 @@
 
 #include "iniparser.hpp"
 
+#include <errno.h>
+#include <sys/stat.h>
+
 constexpr char DELIMITER = '\n';
 
 const char * IniParser::CantOpenFile::what() const noexcept
 {
     return "IniParser: Can't open file";
+}
+
+const char * IniParser::FileDoesNotExist::what() const noexcept
+{
+    return "IniParser: File does not exist";
 }
 
 const char * IniParser::MissingSectionHeader::what() const noexcept
@@ -65,8 +73,13 @@ const char * IniParser::MissingEqual::what() const noexcept
 IniParser::IniParser(const std::string & filePath)
 : is(new std::ifstream(filePath))
 {
-    if (!(*is))
+    if (!(*is)) {
+        struct stat buffer;
+        if (stat(filePath.c_str(), &buffer) != 0 && errno == ENOENT) {
+            throw FileDoesNotExist();
+        }
         throw CantOpenFile();
+    }
     is->exceptions(std::ifstream::badbit);
     lineNumber = 0;
     lineReady = false;
