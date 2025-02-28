@@ -1,17 +1,16 @@
-# print initial information about the project
-message("Running CMake on libdnf...")
-project(libdnf C CXX)
-
-
 # cmake requirements and policies
-cmake_minimum_required(VERSION 2.8.5)
-cmake_policy(SET CMP0005 OLD)
+cmake_minimum_required(VERSION 3.5.0)
 # Avoid a warning because "hth" links to
 # the in-tree libhawkey, but uses pkg-config to find
 # GLib.  There may be a better way to do this...
 cmake_policy(SET CMP0003 NEW)
-include(GNUInstallDirs)
 
+# print initial information about the project
+message("Running CMake on libdnf...")
+project(libdnf C CXX)
+
+# GNUInstallDirs requires a language set with project()
+include(GNUInstallDirs)
 
 # use project specific cmake modules
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
@@ -121,17 +120,17 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wmissing-declarations")
 set(CMAKE_MACOSX_RPATH 0)
 
 # package/project version
-add_definitions(-DPACKAGE_VERSION=\\"${LIBDNF_VERSION}\\")
+add_definitions(-DPACKAGE_VERSION="${LIBDNF_VERSION}")
 
 # The libdnf API is under development now. This enables it for internal usage.
 add_definitions(-DLIBDNF_UNSTABLE_API)
 
 # gettext
-add_definitions(-DGETTEXT_DOMAIN=\\"libdnf\\")
-add_definitions(-DG_LOG_DOMAIN=\\"libdnf\\")
+add_definitions(-DGETTEXT_DOMAIN="libdnf")
+add_definitions(-DG_LOG_DOMAIN="libdnf")
 
 # tests
-add_definitions(-DTESTDATADIR=\\"${CMAKE_SOURCE_DIR}/data/tests\\")
+add_definitions(-DTESTDATADIR="${CMAKE_SOURCE_DIR}/data/tests")
 
 # librhsm
 if(ENABLE_RHSM_SUPPORT)
