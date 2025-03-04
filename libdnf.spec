@@ -62,7 +62,7 @@ License:        LGPL-2.1-or-later
 URL:            https://github.com/rpm-software-management/libdnf
 Source0:        %{url}/archive/%{version}/%{name}-%{version}.tar.gz
 
-BuildRequires:  cmake
+BuildRequires:  cmake >= 3.5.0
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
 BuildRequires:  libsolv-devel >= %{libsolv_version}
