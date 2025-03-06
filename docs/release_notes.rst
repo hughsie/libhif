@@ -20,6 +20,26 @@
 ######################
 
 ====================
+0.74.0 Release Notes
+====================
+
+- Fix a segfault in iterator of a ConfigParser section
+- Update ko.po
+- Split $releasever to $releasever_major and $releasever_minor in c api
+- copr: Add Copr build files
+- Add `persistence` config option
+- ConfigParser: make splitReleasever public
+- C API: Detect releasever_major, releasever_minor from provides
+- C API: Use releasever_{major,minor} from context instead of always splitting
+- C API: support shell-style variable substitution
+- C API: test shell-style variable expressions
+- conf: Improve granularity of ConfigParser exceptions
+- module: Warn if module config file is inaccessible
+- Enable automatic PR reviews
+- build: Increase CMake minimal version to 3.5.0
+- spec: Increase cmake minimal version to 3.5.0
+
+====================
 0.73.4 Release Notes
 ====================
 
