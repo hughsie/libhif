@@ -80,6 +80,7 @@
 #include "plugin/plugin-private.hpp"
 #include "utils/GLibLogger.hpp"
 #include "utils/os-release.hpp"
+#include "utils/utils.hpp"
 
 
 #define MAX_NATIVE_ARCHES    12
@@ -1516,6 +1517,9 @@ dnf_context_set_install_root(DnfContext *context, const gchar *install_root)
     DnfContextPrivate *priv = GET_PRIVATE(context);
     g_free(priv->install_root);
     priv->install_root = g_strdup(install_root);
+
+    auto & mainConf = libdnf::getGlobalMainConfig(false);
+    mainConf.installroot().set(libdnf::Option::Priority::RUNTIME, install_root);
 }
 
 /**
@@ -3992,6 +3996,27 @@ dnf_main_conf_apply_setopts()
     globalSetoptsInSync = true;
 }
 
+static void
+load_from_parser(const libdnf::ConfigParser & parser, const std::string & cfgPath) {
+    const auto & cfgParserData = parser.getData();
+    auto cfgParserDataIter = cfgParserData.find("main");
+    if (cfgParserDataIter != cfgParserData.end()) {
+        auto optBinds = globalMainConfig->optBinds();
+        const auto & cfgParserMainSect = cfgParserDataIter->second;
+        for (const auto & opt : cfgParserMainSect) {
+            auto optBindsIter = optBinds.find(opt.first);
+            if (optBindsIter != optBinds.end()) {
+                try {
+                    optBindsIter->second.newString(libdnf::Option::Priority::MAINCONFIG, opt.second);
+                } catch (const std::exception & ex) {
+                    g_warning("Config error in file \"%s\" section \"main\" key \"%s\": %s",
+                                cfgPath.c_str(), opt.first.c_str(), ex.what());
+                }
+            }
+        }
+    }
+}
+
 libdnf::ConfigMain & getGlobalMainConfig(bool canReadConfigFile)
 {
     std::lock_guard<std::mutex> guard(getGlobalMainConfigMutex);
@@ -4010,27 +4035,37 @@ libdnf::ConfigMain & getGlobalMainConfig(bool canReadConfigFile)
             }
         }
 
-        libdnf::ConfigParser parser;
         const std::string cfgPath{globalMainConfig->config_file_path().getValue()};
         try {
-            parser.read(cfgPath);
-            const auto & cfgParserData = parser.getData();
-            auto cfgParserDataIter = cfgParserData.find("main");
-            if (cfgParserDataIter != cfgParserData.end()) {
-                auto optBinds = globalMainConfig->optBinds();
-                const auto & cfgParserMainSect = cfgParserDataIter->second;
-                for (const auto & opt : cfgParserMainSect) {
-                    auto optBindsIter = optBinds.find(opt.first);
-                    if (optBindsIter != optBinds.end()) {
-                        try {
-                            optBindsIter->second.newString(libdnf::Option::Priority::MAINCONFIG, opt.second);
-                        } catch (const std::exception & ex) {
-                            g_warning("Config error in file \"%s\" section \"main\" key \"%s\": %s",
-                                      cfgPath.c_str(), opt.first.c_str(), ex.what());
-                        }
-                    }
+#ifdef DNF5_CONF_DROP_IN
+            std::string conf_dir_path{CONF_DIR};
+            std::string dist_conf_dir_path{DISTRIBUTION_CONF_DIR};
+
+            // If the main configuration file is from install_root, read drop-in directories from install_root
+            const std::string installroot_path = globalMainConfig->installroot().getValue();
+            if (installroot_path != "/") {
+                const bool from_installroot = libdnf::filesystem::isSubdirectory(installroot_path, cfgPath);
+                if (from_installroot) {
+                    conf_dir_path = libdnf::filesystem::pathJoin(installroot_path, conf_dir_path);
+                    dist_conf_dir_path = libdnf::filesystem::pathJoin(installroot_path, dist_conf_dir_path);
                 }
             }
+
+            // Loads configuration from drop-in directories
+            const auto paths = libdnf::filesystem::createSortedFileList({conf_dir_path, dist_conf_dir_path}, "*.conf");
+            for (const auto & path : paths) {
+                libdnf::ConfigParser parser;
+                parser.read(path);
+                load_from_parser(parser, path);
+            }
+#endif
+
+            // Finally, if a user configuration filename is defined or the file exists in the default location,
+            // it will be loaded.
+            libdnf::ConfigParser parser;
+            parser.read(cfgPath);
+            load_from_parser(parser, cfgPath);
+
         } catch (const libdnf::ConfigParser::CantOpenFile & ex) {
             if (configFilePath) {
                 // Only warning is logged. But error is reported to the caller during loading

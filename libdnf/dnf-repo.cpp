@@ -33,6 +33,7 @@
  * See also: #DnfRepo
  */
 
+#include "conf/Const.hpp"
 #include "conf/OptionBool.hpp"
 #include "conf/ConfigParser.hpp"
 
@@ -57,9 +58,13 @@
 #include "dnf-types.h"
 #include "dnf-utils.h"
 #include "utils/File.hpp"
+#include "utils/filesystem.hpp"
 #include "utils/url-encode.hpp"
 #include "utils/utils.hpp"
 
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+#include <map>
+#endif
 #include <set>
 #include <string>
 #include <vector>
@@ -85,6 +90,9 @@ typedef struct
     LrHandle        *repo_handle;
     LrResult        *repo_result;
     LrUrlVars       *urlvars;
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+    std::map<std::string, std::string> *config_changes; // dnf_repo_set_data, dnf_repo_commit
+#endif
     bool            unit_test_mode;  /* ugly hack for unit tests */
 } DnfRepoPrivate;
 
@@ -120,6 +128,10 @@ dnf_repo_finalize(GObject *object)
     if (priv->context != NULL)
         g_object_remove_weak_pointer(G_OBJECT(priv->context),
                                      (void **) &priv->context);
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+    if (priv->config_changes)
+        delete priv->config_changes;
+#endif
 
     G_OBJECT_CLASS(dnf_repo_parent_class)->finalize(object);
 }
@@ -924,6 +936,66 @@ dnf_repo_conf_from_gkeyfile(DnfRepo *repo, const char *repoId, GKeyFile *gkeyFil
     }
 }
 
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+/* Loads repository configuration overrides */
+static void
+dnf_repo_conf_load_overrides(DnfRepo *repo, const char *repoId)
+{
+    DnfRepoPrivate *priv = GET_PRIVATE(repo);
+    auto & config = *priv->repo->getConfig();
+
+    std::string repos_override_dir_path{libdnf::REPOS_OVERRIDE_DIR};
+    std::string dist_repos_override_dir_path{libdnf::DISTRIBUTION_REPOS_OVERRIDE_DIR};
+
+    // If the repoconfig file is from install_root, read overrides from install_root
+    const std::string installroot_path = dnf_context_get_install_root(priv->context);
+    if (priv->filename && installroot_path != "/") {
+        const bool from_installroot = libdnf::filesystem::isSubdirectory(installroot_path, priv->filename);
+        if (from_installroot) {
+            repos_override_dir_path = libdnf::filesystem::pathJoin(installroot_path, repos_override_dir_path);
+            dist_repos_override_dir_path = libdnf::filesystem::pathJoin(installroot_path, dist_repos_override_dir_path);
+        }
+    }
+
+    const auto paths = libdnf::filesystem::createSortedFileList(
+        {repos_override_dir_path, dist_repos_override_dir_path}, "*.repo");
+
+    for (const auto & path : paths) {
+        libdnf::ConfigParser parser;
+        parser.read(path);
+        const auto & cfg_parser_data = parser.getData();
+        for (const auto & cfg_parser_data_iter : cfg_parser_data) {
+            const auto & section = cfg_parser_data_iter.first;
+            g_autofree gchar * repo_id_pattern = dnf_repo_substitute(repo, section.c_str());
+
+            if (fnmatch(repo_id_pattern, repoId, FNM_EXTMATCH) != 0) {
+                continue;
+            }
+
+            auto optBinds = config.optBinds();
+            for (const auto & opt : cfg_parser_data_iter.second) {
+                auto optBindsIter = optBinds.find(opt.first);
+                if (optBindsIter != optBinds.end()) {
+
+                    // Substitute vars.
+                    g_autofree gchar * subst_value = dnf_repo_substitute(repo, opt.second.c_str());
+
+                    try {
+                        optBindsIter->second.newString(libdnf::Option::Priority::REPOCONFIG, subst_value);
+                    } catch (const std::exception & ex) {
+                        g_warning("Config error in file \"%s\" section \"%s\" key \"%s\": %s",
+                                    path.c_str(), repo_id_pattern, opt.first.c_str(), ex.what());
+                    }
+                } else {
+                    g_debug("Unknown configuration option in file \"%s\": %s = %s", path.c_str(), opt.first.c_str(),
+                            opt.second.c_str());
+                }
+            }
+        }
+    }
+}
+#endif
+
 static void
 dnf_repo_apply_setopts(libdnf::ConfigRepo &config, const char *repoId)
 {
@@ -967,6 +1039,9 @@ dnf_repo_set_keyfile_data(DnfRepo *repo, gboolean reloadFromGKeyFile, GError **e
     // Reload repository configuration from keyfile.
     if (reloadFromGKeyFile) {
         dnf_repo_conf_from_gkeyfile(repo, repoId, priv->keyfile);
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+        dnf_repo_conf_load_overrides(repo, repoId);
+#endif
         dnf_repo_apply_setopts(*conf, repoId);
     }
 
@@ -1248,6 +1323,9 @@ dnf_repo_setup(DnfRepo *repo, GError **error) try
 
     auto conf = priv->repo->getConfig();
     dnf_repo_conf_from_gkeyfile(repo, repoId, priv->keyfile);
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+    dnf_repo_conf_load_overrides(repo, repoId);
+#endif
     dnf_repo_apply_setopts(*conf, repoId);
 
     auto sslverify = conf->sslverify().getValue();
@@ -2041,9 +2119,49 @@ dnf_repo_set_data(DnfRepo *repo,
                   GError **error) try
 {
     DnfRepoPrivate *priv = GET_PRIVATE(repo);
+
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+    // we note the changes
+    // dnf_repo_commit writes them to the override configuration file
+    if (!priv->config_changes) {
+        priv->config_changes = new std::map<std::string, std::string>;
+    }
+    (*priv->config_changes)[parameter] = value;
+#endif
+
     g_key_file_set_string(priv->keyfile, priv->repo->getId().c_str(), parameter, value);
     return TRUE;
 } CATCH_TO_GERROR(FALSE)
+
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+static std::string
+get_repos_config_override_dir_path(DnfRepo *repo)
+{
+    DnfRepoPrivate *priv = GET_PRIVATE(repo);
+
+    if (priv->filename) {
+        auto install_root = dnf_context_get_install_root(priv->context);
+        if (strcmp(install_root, "/") != 0 && libdnf::filesystem::isSubdirectory(install_root, priv->filename)) {
+            // we are working with install_root and the repository configuration file is located in installroot
+            // -> we will use overrides from install_root
+            return libdnf::filesystem::pathJoin(install_root, libdnf::REPOS_OVERRIDE_DIR);
+        }
+    }
+
+    return libdnf::REPOS_OVERRIDE_DIR;
+}
+
+static void
+modify_config(libdnf::ConfigParser & parser, const std::string & section_id, const std::map<std::string, std::string> & opts)
+{
+    if (!parser.hasSection(section_id)) {
+        parser.addSection(section_id);
+    }
+    for (const auto & key_val : opts) {
+        parser.setValue(section_id, key_val.first, key_val.second, "");
+    }
+}
+#endif
 
 /**
  * dnf_repo_commit:
@@ -2071,11 +2189,51 @@ dnf_repo_commit(DnfRepo *repo, GError **error) try
         return FALSE;
     }
 
+#ifdef DNF5_CONF_REPOS_OVERRIDE
+    constexpr const char * REPOS_OVERRIDE_CFG_HEADER =
+    "# Generated by libdnf.\n# Do not modify this file manually.\n";
+    const std::string CFG_MANAGER_REPOS_OVERRIDE_FILENAME = "99-config_manager.repo";
+
+    // Write new and modify existing options in the repositories overrides configuration file.
+    if (priv->config_changes && !priv->config_changes->empty()) {
+        const auto repos_config_override_dir_path = get_repos_config_override_dir_path(repo);
+        // Create directory tree if not exist
+        libdnf::makeDirPath(repos_config_override_dir_path);
+
+        auto repos_override_file_path =
+            libdnf::filesystem::pathJoin(repos_config_override_dir_path, CFG_MANAGER_REPOS_OVERRIDE_FILENAME);
+
+        libdnf::ConfigParser parser;
+
+        const bool exists = libdnf::filesystem::exists(repos_override_file_path);
+        if (exists) {
+            parser.read(repos_override_file_path);
+        }
+
+        parser.getHeader() = REPOS_OVERRIDE_CFG_HEADER;
+
+        modify_config(parser, priv->repo->getId(), *priv->config_changes);
+
+        parser.write(repos_override_file_path, false);
+        if (!exists) {
+            // Sets permissions to "rw-r--r--"
+            chmod(repos_override_file_path.c_str(), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        }
+
+        // Config changes were written to file, we delete the list of changes for writing
+        delete priv->config_changes;
+        priv->config_changes = nullptr;
+    }
+    return TRUE;
+
+#else
+
     /* dump updated file to disk */
     data = g_key_file_to_data(priv->keyfile, NULL, error);
     if (data == NULL)
         return FALSE;
     return g_file_set_contents(priv->filename, data, -1, error);
+#endif
 } CATCH_TO_GERROR(FALSE)
 
 /**
